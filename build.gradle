@@ -1,0 +1,108 @@
+// Gradle 3.4+ 使用java-library插件替换java插件
+apply plugin: 'java-library'
+
+// 需要部署jar包的项目
+apply from: "${rootDir}/deploy.gradle"
+
+// 读取的gradle.properties中的变量
+group = "${group}"
+version = "${version}"
+
+ext {
+    pagehelperSpringBootStarter = '1.2.13'
+    lombok = '1.18.8'
+}
+
+//  指定编码环境:指定编译编译.java文件的jdk版本
+sourceCompatibility = JavaVersion.VERSION_1_8
+//  指定编译环境:确保class文件与targetCompatibility指定版本，或者更新的java虚拟机兼容
+targetCompatibility = JavaVersion.VERSION_1_8
+
+[compileJava, compileTestJava, javadoc]*.options*.encoding = 'UTF-8'
+
+def localMavenRepo = 'file://' + new File(System.getProperty('user.home'), '.m2/repository').absolutePath
+
+logger.quiet(localMavenRepo)
+
+repositories {
+    maven { url localMavenRepo }
+    // 本地maven仓库
+    mavenLocal()
+    // 阿里的源
+    maven { url "http://maven.aliyun.com/nexus/content/groups/public/" }
+    mavenCentral()
+}
+
+wrapper {
+    /* 使用5.6.4版本在idea中会导入项目报错，命令行构建项目没有问题 */
+    gradleVersion = '5.6.4'
+}
+
+compileJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    options.encoding = 'UTF-8'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+    }
+    test {
+        java {
+            srcDirs = ['src/test/java']
+        }
+    }
+}
+
+/**
+ * 所有子项目配置
+ */
+
+
+/**
+ * api和implementation两种依赖的不同点在于：它们声明的依赖其他模块是否能使用。
+ *
+ * api：当其他模块依赖于此模块时，此模块使用api声明的依赖包是可以被其他模块使用
+ * implementation：当其他模块依赖此模块时，此模块使用implementation声明的依赖包只限于模块内部使用，不允许其他模块使用。
+ *
+ * All api dependencies are marked as compile while implementation dependencies are marked as runtime.
+ */
+
+// gradle <cmd> --refresh-dependencies 强制刷新依赖不使用本地缓存
+dependencies {
+
+    api "com.github.pagehelper:pagehelper-spring-boot-starter:${pagehelperSpringBootStarter}"
+    api "org.springframework.data:spring-data-commons:${springBootVersion}"
+
+    // lombok配置
+    // idea中如果出现单元测试有问题
+    // 需要设置 File | Settings | Build, Execution, Deployment | Compiler | Annotation Processors
+    annotationProcessor "org.projectlombok:lombok:${lombok}"
+    compileOnly "org.projectlombok:lombok:${lombok}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombok}"
+    testCompileOnly "org.projectlombok:lombok:${lombok}"
+
+}
+
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'ScalaFilebeat',
+                'Implementation-Version': "$version",
+                'Built-By': "Spring",
+                'Build-Jdk-Spec': "1.8",
+                'Created-By': "Gradle Archiver 5.4.1"
+    }
+}
+
+task createDirs {
+    sourceSets*.java.srcDirs*.each { it.mkdirs() }
+    sourceSets*.resources.srcDirs*.each { it.mkdirs() }
+}
+
+
+
+
+

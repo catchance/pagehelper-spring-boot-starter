@@ -1,0 +1,173 @@
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+//gradle.taskGraph.whenReady { taskGraph ->
+//    if (taskGraph.allTasks.any { it instanceof Sign } && project.ext.isReleaseVersion) {
+//        def id = System.getenv('GPG_ID')
+//        def file = '/home/travis/.gnupg/secring.gpg'
+//        def password = System.getenv('GPG_PASSWORD')
+//
+//        allprojects { ext."signing.keyId" = id }
+//        allprojects { ext."signing.secretKeyRingFile" = file }
+//        allprojects { ext."signing.password" = password }
+//    }
+//}
+
+//ext {
+//    isReleaseVersion = !(projectVersion =~ /-SNAPSHOT$/)
+//    isNeedSign = System.getenv('GPG_ID') && isReleaseVersion
+//}
+// 添加maven optional依赖支持
+// 除了本文中的方式，还有通过插件的方式 
+// https://github.com/nebula-plugins/gradle-extra-configurations-plugin
+configurations {
+    optional
+    compile.extendsFrom optional
+}
+
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    archiveClassifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    archiveClassifier = 'javadoc'
+}
+
+// 指定上传的路径
+def localMavenRepo = 'file://' + new File(System.getProperty('user.home'), '.m2/repository').absolutePath
+
+// maven-publish 插件
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+//            artifactId = 'strategy-spring-boot-autoconfigure'
+            from components.java
+            artifact sourcesJar
+            artifact javadocJar
+            pom {
+                name = 'strategy'
+                description = 'A strategy library'
+                url = 'https://github.com/catchance/strategy'
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'catchance'
+                        name = 'catchance'
+                        email = 'catchance@163.com'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://example.com/my-library.git'
+                    developerConnection = 'scm:git:ssh://example.com/my-library.git'
+                    url = 'http://example.com/my-library/'
+                }
+                // 添加maven optional 依赖支持
+                withXml {
+                    asNode().dependencies.dependency.findAll { xmlDep ->
+                        // mark optional dependencies
+                        if (project.configurations.optional.allDependencies.findAll { dep ->
+                            xmlDep.groupId.text() == dep.group && xmlDep.artifactId.text() == dep.name
+                        }) {
+                            def xmlOptional = xmlDep.optional[0]
+                            if (!xmlOptional) {
+                                xmlOptional = xmlDep.appendNode('optional')
+                            }
+                            xmlOptional.value = 'true'
+                        }
+
+                        // fix maven-publish issue when all maven dependencies are placed into runtime scope
+                        if (project.configurations.compile.allDependencies.findAll { dep ->
+                            xmlDep.groupId.text() == dep.group && xmlDep.artifactId.text() == dep.name
+                        }) {
+                            def xmlScope = xmlDep.scope[0]
+                            if (!xmlScope) {
+                                xmlScope = xmlDep.appendNode('scope')
+                            }
+                            xmlScope.value = 'compile'
+                        }
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            // change URLs to point to your repos, e.g. http://my.org/repo
+            // 私服配置
+//            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+//            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots/"
+//            credentials {
+//                username NEXUS_USERNAME
+//                password NEXUS_PASSWORD
+//            }
+//            def releasesRepoUrl = "$buildDir/repos/releases"
+//            def snapshotsRepoUrl = "$buildDir/repos/snapshots"
+
+            def releasesRepoUrl = localMavenRepo
+            def snapshotsRepoUrl = localMavenRepo
+
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+        }
+    }
+}
+
+/**
+ * https://www.jianshu.com/p/c898c9082872
+ *
+ * ### 生成gpg密钥
+ * - gpg --gen-key
+ * - 4
+ * - 2048
+ * - 0
+ * - y
+ * - catchance
+ * - catchance@163.com
+ * - for gradle
+ * - o
+ * - pub   2048R/2F677125 2019-07-31 （这里的 2F677125 就是 signing.keyId）
+ *
+ * ### ~/.gradle/gradle.properties 配置
+ * signing.keyId=2F677125
+ * signing.password=
+ * signing.secretKeyRingFile=C:/Users/HP/.gnupg/secring.gpg
+ *
+ */
+signing {
+    sign publishing.publications.mavenJava
+}
+
+javadoc {
+
+    // Gradle解决JavaDoc中文乱码问题
+    options {
+        encoding 'UTF-8'
+        charSet 'UTF-8'
+        author true
+        version true
+        title "文档大标题"
+        tags 'email:a:"邮箱"', 'date:a:"时间"'
+    }
+    // javadoc -tag date:a:"date" 自定义tag 可以排除 错误：未知标记： date
+
+//    Gradle解决JavaDoc中文乱码问题
+//    options.addStringOption("encoding", "UTF-8")
+//    options.addStringOption("charset", "UTF-8")
+//    options.addBooleanOption("author", true)
+//    options.addBooleanOption("version", true)
+
+    // doclint的这种严格检查，默认情况下是打开的，添加-Xdoclint:none便可关闭检查。
+//    options.addStringOption('Xdoclint:none', '-quiet')
+
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.addBooleanOption('html5', true)
+    }
+}
+
+//javadoc.enabled false
